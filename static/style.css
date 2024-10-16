@@ -1,0 +1,64 @@
+:root {
+    --color-primary: #16423C;
+    --color-secondary: #6A9C89;
+    --color-background: #E9EFEC;
+    --color-background-accent: #C4DAD2;
+}
+
+body {
+    background-color: var(--color-background);
+    color: var(--color-primary)
+}
+
+h3 {
+    margin-top: 0;
+}
+
+.flex-container {
+    height: 100%;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.container {
+    width: 1280px;
+    max-width: 100%;
+    position: relative;
+}
+
+.container > div {
+    box-sizing: border-box;
+    margin: 5px 0;
+    display: flex;
+    flex-direction: row;
+}
+
+.half-width {
+    width: 50%;
+}
+
+.monitor-container {
+    width: 100%;
+    padding: 5px;
+    text-align: center;
+
+    background: var(--color-background-accent);
+    border-radius: 10%;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    border: 1px solid var(--color-primary);
+}
+
+.dot-bordered {
+    border: 1px dotted var(--color-primary);
+}
+
+.white-spaced {
+    box-sizing: border-box;
+    margin: 2px;
+    padding: 5px;
+}

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Trascrizione e Riassunto</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div class="flex-container main-container">
+        <div class="container">
+            <h2>Carica il file</h2>
+            <div>
+                <input type="file" id="fileInput">
+            </div>
+            <div>
+                <span>Lingua del riassunto:</span>
+                <select id="outputLanguage">
+                    <option value="Italian">Italiano</option>
+                    <option value="English">Inglese</option>
+                </select>
+                <button style="margin-left: 2em;" onclick="uploadFile()">Upload</button>
+            </div>
+            <div>
+                <div class="monitor-container">
+                    Status: <span id="status">in attesa...</span>
+                </div>
+            </div>
+            <div>
+                <div class="half-width dot-bordered white-spaced" style="margin-left: 0">
+                    <h3>Trascrizione</h3>
+                    <div id="transcription"></div>
+                </div>
+                <div class="half-width dot-bordered white-spaced" style="margin-right: 0">
+                    <h3>Riassunto</h3>
+                    <div id="summary"></div>
+                </div>
+            </div>
+            <div id="time-passed"></div>
+        </div>
+    </div>
+
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
+    <script>
+        const statusElem = document.getElementById("status");
+        const transcriptionElem = document.getElementById("transcription");
+        const summaryElem = document.getElementById("summary");
+        const timePassedElem = document.getElementById("time-passed");
+
+        const markdownConverter = new showdown.Converter();
+
+        function uploadFile() {
+            const file = document.getElementById("fileInput").files[0];
+            const outputLanguage = document.getElementById("outputLanguage").value;
+            const formData = new FormData();
+            formData.append("file", file);
+
+            transcriptionElem.innerHTML = '';
+            summaryElem.innerHTML = '';
+            timePassedElem.innerHTML = '';
+
+            fetch(`/summarize?output_language=${outputLanguage}`, { method: "POST", body: formData })
+                .then(response => response.json())
+                .then(data => startWebSocket(data.task_id));
+        }
+
+        function startWebSocket(task_id) {
+            const ws = new WebSocket(`ws://localhost:8000/ws/${task_id}`);
+            const startTime = Date.now();
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                switch (data.status) {
+                    case 'INITIALIZED':
+                        status.textContent = 'inizializzato.';
+                    case 'PENDING':
+                        statusElem.textContent = 'in attesa di essere processato...';
+                        break;
+                    case 'AUDIO_CONVERT':
+                        statusElem.textContent = 'conversione audio in corso...';
+                        break;
+                    case 'TRANSCRIPTION':
+                        statusElem.textContent = 'trascrizione in corso...';
+                        break;
+                    case 'SUMMARIZATION':
+                        statusElem.textContent = 'riassunto in corso...';
+                        break;
+                    case 'READY':
+                        statusElem.textContent = 'pronto.';
+                        const timePassedSeconds = Math.round((Date.now() - startTime) / 1000);
+                        const hh = Math.floor(timePassedSeconds / 3600);
+                        const mm = Math.floor((timePassedSeconds % 3600) / 60);
+                        const ss = timePassedSeconds % 60;
+                        timePassedElem.textContent = `Tempo trascorso: ${hh.toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}:${ss.toString().padStart(2, '0')}`;
+                        break;
+                }
+
+                if (data.transcription) document.getElementById("transcription").textContent = data.transcription;
+                if (data.summary) document.getElementById("summary").innerHTML = markdownConverter.makeHtml(data.summary);
+
+                if (data.status === 'READY') {
+                    ws.close();
+                }
+            };
+        }
+    </script>
+</body>
+</html>

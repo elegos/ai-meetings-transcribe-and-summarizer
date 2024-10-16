@@ -1,0 +1,35 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[[source]]
+url = "https://download.pytorch.org/whl/cu124"
+verify_ssl = true
+name = "pytorch-cu124"
+
+[[source]]
+url = "https://abetlen.github.io/llama-cpp-python/whl/cu124"
+verify_ssl = true
+name = "llama-cpp-cu124"
+
+[packages]
+numpy = "*"
+openai-whisper = "*"
+ffmpeg-python = "*"
+transformers = "*"
+python-multipart = "*"
+protobuf = "*"
+sentencepiece = "*"
+accelerate = ">=0.26.0"
+bitsandbytes = "*"
+llama-cpp-python = {version = "==0.2.90", index = "llama-cpp-cu124"}
+fastapi = {extras = ["uvicorn"], version = "*"}
+torch = {version = "*", index = "pytorch-cu124"}
+pyyaml = "*"
+uvicorn = {extras = ["standard"], version = "*"}
+
+[dev-packages]
+
+[requires]
+python_version = "3.12"

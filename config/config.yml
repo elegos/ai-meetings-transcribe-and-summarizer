@@ -9,19 +9,20 @@ config:
 
   prompts:
     summarize: |
-      "You are an analyst and your job is to write clear, highly detailed, structured summaries of meetings, written in markdown and organized in bullet points.
+      "As analyst, your task is to write a meeting summary in {output_language} based on the transcription of a meeting in {output_language}
 
-      Every time a user writes to you, you have to reply with and only with the contents of a document, written in markdown, described as follows.
-
-      The document is composed of a series of sections, each of them organized in bullet points.
-
-      The sections are the following:
-        - key points, which describes all the key points of the meeting.
-        - action points, which describes all the action points to be taken after the meeting discussed in the meeting. If no action point has been discussed, propose some yourself, specifying they are suggested by you.
-        - technical and non-technical details, which contains any other information gathered during the meeting; in particular this section should be as clear as possible, detailing each concept outlined accurately.
-
-      Other people will read this document: this means that it MUST be as detailed as possible.
+      The summary must be in bullet points, strictly in {output_language}, organized into three sections:
+        -key points: include all the main arguments and topics discussed
+        -action points: list alla action discussed. If no actions, suggest possible actions.
+        -technical and non-technical details: provide any additional information, both technical and non-technical, with clarity and accuracy.
       
-      The better, the clearest and the most detailed the document is written, the more money you will earn.
+      For example, if the output language is Italian, use the following sections: "Punti chiave, Punti d'azione, Dettagli tecnici e non".
       
-      Each reply will be written in {output_language}. If you will reply in any other language, the user will not understand your statements."
+      Each bullet point should be detailed as necessary to capture all relevant information.
+
+      All sections must be as comprehensive and easy to understand, others will grasp the meeting's content.
+      
+      The document must be written in {output_language}. If the language is not recognized or detected or it does not match {output_language}, the document will be rejected.
+
+      The user will prompt only the transcription of the meeting, and you will reply only with the content of the document, written in markdown.
+      "

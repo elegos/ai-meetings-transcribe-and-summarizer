@@ -1,15 +1,23 @@
+from datetime import timedelta
 import gc
 from pathlib import Path
+from typing import Generator
 
 
 from llama_cpp import Llama
+from pyannote.audio import Pipeline
 import torch
+import torchaudio
 import whisper
 
 from services.config import Config
+from services.io_tools import unlink
 
 models_root = Path(__file__).parent.parent.joinpath('models')
 models_root.mkdir(parents=True, exist_ok=True)
+
+def seconds_to_timedelta(seconds: int) -> str:
+    return str(timedelta(seconds=seconds))
 
 def get_ordered_cuda_devices() -> list[str]:
     '''Returns a list of ordered CUDA device indexes, ordering by total memory DESC'''
@@ -27,7 +35,60 @@ def get_ordered_cuda_devices() -> list[str]:
 
     return [result['index'] for result in raw_result]
 
-def transcribe(audio_file_path: Path) -> str:
+def transcribe(audio_file_path: Path) -> Generator[float, None, str]:
+    audio, sr = torchaudio.load(audio_file_path)
+
+    # Diarize
+    pyannote_pipeline = Pipeline.from_pretrained('pyannote/speaker-diarization-3.1', cache_dir=models_root.joinpath('pyannote')).to(torch.device(f'cuda:{get_ordered_cuda_devices()[0]}'))
+    diarization = pyannote_pipeline(audio_file_path)
+    del pyannote_pipeline # unload model before the end of the function
+
+    # Transcribe
+    whisper_model = whisper.load_model('large-v3', device=f'cuda:{get_ordered_cuda_devices()[0]}', download_root=str(models_root.joinpath('whisper')), in_memory=True)
+
+
+    # Get the first minute of conversation to get the language
+    sample_audio = audio[:, :int(60 * sr)]
+    tmp_path = audio_file_path.with_suffix('.tmp.wav')
+    torchaudio.save(tmp_path, sample_audio, sr)
+    result = whisper_model.transcribe(str(tmp_path.absolute()), task="transcribe", without_timestamps=True)
+    detected_language = result.get("language", "unknown")
+    unlink(tmp_path)
+
+    raw_turns = [{ 'speaker': speaker, 'start': turn.start, 'end': turn.end } for turn, _, speaker in diarization.itertracks(yield_label=True)]
+    turns = []
+    for i, elem in enumerate(raw_turns):
+        if i == 0 or turns[-1]['speaker'] != elem['speaker']:
+            turns.append(elem)
+        else:
+            turns[-1]['end'] = elem['end']
+    
+    num_turns = len(turns)
+    transcription: list[dict] = []
+    for i, turn in enumerate(turns):
+        speaker = turn['speaker']
+        start_time, end_time = turn['start'], turn['end']
+        start_sample, end_sample = int(start_time * sr), int(end_time * sr)
+
+        # Extract the segment of the audio
+        tmp_path = audio_file_path.with_suffix('.tmp.wav')
+        segment_audio = audio[:, start_sample:end_sample]
+        torchaudio.save(tmp_path, segment_audio, sr)
+
+        result = whisper_model.transcribe(str(tmp_path.absolute()), condition_on_previous_text=False, language=detected_language)
+        unlink(tmp_path)
+
+        transcription.append(f'{speaker}: {result['text']}')
+
+        yield (i+1) / num_turns
+
+    del whisper_model
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    return '\n\n'.join(transcription)
+
+def transcribe_simple(audio_file_path: Path) -> str:
     model = whisper.load_model('large-v3', device=f'cuda:{get_ordered_cuda_devices()[0]}', download_root=str(models_root.joinpath('whisper')), in_memory=True)
     result = model.transcribe(str(audio_file_path))
 
@@ -40,16 +101,27 @@ def transcribe(audio_file_path: Path) -> str:
 
 def summarize(text: str, output_language: str) -> str:
     model_name = 'bartowski/Mistral-Nemo-Instruct-2407-GGUF'
-    model = Llama.from_pretrained(
-        model_name,
-        cache_dir=models_root,
-        filename='Mistral-Nemo-Instruct-2407-Q6_K_L.gguf',
-        # verbose=False,
-        n_gpu_layers=-1,
-        n_ctx=10*1024,
-        # main_gpu=1,
-        main_gpu=int(get_ordered_cuda_devices()[0]),
-    )
+    model = None
+    context_size = 24
+
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    while True:
+        try:
+            model = Llama.from_pretrained(
+                model_name,
+                cache_dir=models_root,
+                filename='Mistral-Nemo-Instruct-2407-Q6_K_L.gguf',
+                # verbose=False,
+                n_gpu_layers=-1,
+                n_ctx=context_size*1024,
+                # main_gpu=1,
+                main_gpu=int(get_ordered_cuda_devices()[0]),
+            )
+            break
+        except Exception as e:
+            context_size -= 2
 
     raw_prompt = Config().prompts.summarize.format(output_language=output_language, text=text)
     output = model(prompt=f'[INST]{raw_prompt}[/INST]', echo=True, max_tokens=None)
@@ -57,5 +129,9 @@ def summarize(text: str, output_language: str) -> str:
     summary = output['choices'][0]['text']
     e_index = summary.find('[/INST]')
     summary = summary[e_index+7:]
+
+    del model
+    gc.collect()
+    torch.cuda.empty_cache()
 
     return summary

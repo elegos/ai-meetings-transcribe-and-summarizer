@@ -4,16 +4,29 @@ from time import sleep
 from typing import Any, Callable
 
 from services import ai_tools, multimedia_convert
-from services.task_manager import TaskManager, TaskState
+from services.io_tools import unlink
+from services.task_manager import Task, TaskManager, TaskState
 
-def unlink(file_path: Path):
-    if file_path.exists():
-        file_path.unlink()
 
 async def run_in_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
     loop = asyncio.get_running_loop()
 
     return await loop.run_in_executor(None, func, *args, **kwargs)
+
+def _transcribe_step(task: Task, audio_file_path: Path):
+    transcriptor = ai_tools.transcribe(audio_file_path)
+    result = None
+
+    try:
+        while True:
+            progress = next(transcriptor)
+            task.status_progress = progress
+    except StopIteration as e:
+        task.status_progress = None
+
+        result = e.value
+    
+    return result
 
 async def process_file(file_path: Path, task_id: str):
     manager = TaskManager()
@@ -36,12 +49,12 @@ async def process_file(file_path: Path, task_id: str):
     audio_file_path = file_path.with_suffix('.wav')
     task.status = TaskState.AUDIO_CONVERT
     await run_in_thread(multimedia_convert.convert_to_audio, file_path, audio_file_path)
+    unlink(file_path)
 
     # 2. transcribe
     task.status = TaskState.TRANSCRIPTION
-    task.transcription = await run_in_thread(ai_tools.transcribe, audio_file_path)
-
-    unlink(file_path)
+    # task.transcription = ai_tools.transcribe(audio_file_path)
+    task.transcription = await run_in_thread(_transcribe_step, task, audio_file_path)
     unlink(audio_file_path)
 
     # 3. summarize

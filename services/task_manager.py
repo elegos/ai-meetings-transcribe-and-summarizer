@@ -22,10 +22,13 @@ class Task:
     transcription: str|None = field(default=None)
     summary: str|None = field(default=None)
 
+    status_progress: float|None = field(default=None)
+
     def public_dict(self):
         return {
             'id': self.id,
             'status': self.status.name,
+            'status_progress': self.status_progress,
             'transcription': self.transcription,
             'summary': self.summary
         }

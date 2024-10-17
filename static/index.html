@@ -69,20 +69,22 @@
 
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
+                const progress = data.status_progress ? ` (${(data.status_progress*100).toFixed(2)}%)` : '';
+                
                 switch (data.status) {
                     case 'INITIALIZED':
                         status.textContent = 'inizializzato.';
                     case 'PENDING':
-                        statusElem.textContent = 'in attesa di essere processato...';
+                        statusElem.textContent = `in attesa di essere processato${progress}...`;
                         break;
                     case 'AUDIO_CONVERT':
-                        statusElem.textContent = 'conversione audio in corso...';
+                        statusElem.textContent = `conversione audio in corso${progress}...`;
                         break;
                     case 'TRANSCRIPTION':
-                        statusElem.textContent = 'trascrizione in corso...';
+                        statusElem.textContent = `trascrizione in corso${progress}...`;
                         break;
                     case 'SUMMARIZATION':
-                        statusElem.textContent = 'riassunto in corso...';
+                        statusElem.textContent = `riassunto in corso${progress}...`;
                         break;
                     case 'READY':
                         statusElem.textContent = 'pronto.';
@@ -94,7 +96,7 @@
                         break;
                 }
 
-                if (data.transcription) document.getElementById("transcription").textContent = data.transcription;
+                if (data.transcription) document.getElementById("transcription").innerHTML = markdownConverter.makeHtml(data.transcription);
                 if (data.summary) document.getElementById("summary").innerHTML = markdownConverter.makeHtml(data.summary);
 
                 if (data.status === 'READY') {

@@ -48,6 +48,7 @@ async def summarize(file: UploadFile, output_language: str, background_tasks: Ba
 
 @process_router.websocket('/ws/{task_id}')
 async def websocket_task_status(websocket: WebSocket, task_id: str):
+    old_state = None
     await websocket.accept()
     while True:
         task = TaskManager().get_task(task_id)
@@ -56,7 +57,10 @@ async def websocket_task_status(websocket: WebSocket, task_id: str):
 
             break
 
-        await websocket.send_json(task.public_dict())
+        state = task.public_dict()
+        if state != old_state:
+            await websocket.send_json(task.public_dict())
+            old_state = state
 
         if task.status != TaskState.READY:
             await sleep(1)

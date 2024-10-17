@@ -39,13 +39,15 @@ def transcribe(audio_file_path: Path) -> Generator[float, None, str]:
     audio, sr = torchaudio.load(audio_file_path)
 
     # Diarize
-    pyannote_pipeline = Pipeline.from_pretrained('pyannote/speaker-diarization-3.1', cache_dir=models_root.joinpath('pyannote')).to(torch.device(f'cuda:{get_ordered_cuda_devices()[0]}'))
+    pyannote_pipeline = Pipeline.from_pretrained(Config().models.pyannote, cache_dir=models_root.joinpath('pyannote')).to(torch.device(f'cuda:{get_ordered_cuda_devices()[0]}'))
     diarization = pyannote_pipeline(audio_file_path)
+
     del pyannote_pipeline # unload model before the end of the function
+    gc.collect()
+    torch.cuda.empty_cache()
 
     # Transcribe
-    whisper_model = whisper.load_model('large-v3', device=f'cuda:{get_ordered_cuda_devices()[0]}', download_root=str(models_root.joinpath('whisper')), in_memory=True)
-
+    whisper_model = whisper.load_model(Config().models.whisper, device=f'cuda:{get_ordered_cuda_devices()[0]}', download_root=str(models_root.joinpath('whisper')), in_memory=True)
 
     # Get the first minute of conversation to get the language
     sample_audio = audio[:, :int(60 * sr)]
@@ -88,21 +90,10 @@ def transcribe(audio_file_path: Path) -> Generator[float, None, str]:
 
     return '\n\n'.join(transcription)
 
-def transcribe_simple(audio_file_path: Path) -> str:
-    model = whisper.load_model('large-v3', device=f'cuda:{get_ordered_cuda_devices()[0]}', download_root=str(models_root.joinpath('whisper')), in_memory=True)
-    result = model.transcribe(str(audio_file_path))
-
-    # Useless?
-    del model
-    gc.collect()
-    torch.cuda.empty_cache()
-
-    return result['text']
-
 def summarize(text: str, output_language: str) -> str:
-    model_name = 'bartowski/Mistral-Nemo-Instruct-2407-GGUF'
-    model = None
-    context_size = 24
+    model: Llama = None
+    llm_chat = None
+    context_size = Config().models.llama_summarize['starting_context_size']
 
     gc.collect()
     torch.cuda.empty_cache()
@@ -110,9 +101,9 @@ def summarize(text: str, output_language: str) -> str:
     while True:
         try:
             model = Llama.from_pretrained(
-                model_name,
+                repo_id=Config().models.llama_summarize['model_name'],
                 cache_dir=models_root,
-                filename='Mistral-Nemo-Instruct-2407-Q6_K_L.gguf',
+                filename=Config().models.llama_summarize['file_name'],
                 # verbose=False,
                 n_gpu_layers=-1,
                 n_ctx=context_size*1024,
@@ -123,12 +114,14 @@ def summarize(text: str, output_language: str) -> str:
         except Exception as e:
             context_size -= 2
 
-    raw_prompt = Config().prompts.summarize.format(output_language=output_language, text=text)
-    output = model(prompt=f'[INST]{raw_prompt}[/INST]', echo=True, max_tokens=None)
+    
 
-    summary = output['choices'][0]['text']
-    e_index = summary.find('[/INST]')
-    summary = summary[e_index+7:]
+    output = model.create_chat_completion(messages=[
+        {'role': 'system', 'content': Config().prompts.summarize.format(output_language=output_language)},
+        {'role': 'user', 'content': text},
+    ])
+
+    summary = output['choices'][0]['message']['content']
 
     del model
     gc.collect()

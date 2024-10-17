@@ -8,10 +8,18 @@ import yaml
 class Prompts:
     summarize: str|None
 
+@dataclass
+class Models:
+    whisper: str
+    pyannote: str
+    llama_summarize: str
+
 class Config:
     _instance = None
+    _initialized = False
 
-    prompts: Prompts = None
+    prompts: Prompts
+    models: Models
 
     def __new__(cls) -> 'Config':
         if cls._instance is None:
@@ -19,13 +27,25 @@ class Config:
         return cls._instance
 
     def __init__(self, **kwargs) -> None:
-        if self.prompts is not None:
+        if self._initialized is True:
             return
+    
+        self._initialized = True
 
-        prompts = Prompts(None)
-
-        with Path(__file__).parent.parent.joinpath('config', 'prompts.yml').open('r') as f:
+        with Path(__file__).parent.parent.joinpath('config', 'config.yml').open('r') as f:
             raw_prompts = yaml.safe_load(f)
-            prompts.summarize = raw_prompts['prompts']['summarize']
 
-        self.prompts = prompts
+            prompts = Prompts(summarize=raw_prompts['config']['prompts']['summarize'])
+            models = Models(
+                whisper=raw_prompts['config']['models']['whisper'],
+                pyannote=raw_prompts['config']['models']['pyannote'],
+                llama_summarize={
+                    'model_name': raw_prompts['config']['models']['llama_summarize']['model_name'],
+                    'file_name': raw_prompts['config']['models']['llama_summarize']['file_name'],
+                    'starting_context_size': raw_prompts['config']['models']['llama_summarize']['starting_context_size'],
+                }
+            )
+
+            self.prompts = prompts
+            self.models = models
+            
